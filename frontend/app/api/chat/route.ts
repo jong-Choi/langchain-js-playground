@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ollama from 'ollama';
+import { Readable } from 'stream';
 
 // Ollama 모델 설정
 const MODEL_NAME = "hf.co/rippertnt/HyperCLOVAX-SEED-Text-Instruct-1.5B-Q4_K_M-GGUF:Q4_K_M";
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
   try {
     const { userInput } = await request.json();
 
-    // 사용자 입력이 없거나 "exit"인 경우 처리
     if (!userInput || userInput === "exit") {
       return NextResponse.json({ 
         message: "대화가 종료되었습니다.",
@@ -38,33 +38,40 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 모델이 설치되어 있는지 확인
     await ensureModelExists();
-
-    // 사용자 메시지를 대화 기록에 추가
     messages.push({ role: "user", content: userInput });
 
-    // 대화 기록을 기반으로 AI 응답 가져오기
-    const response = await ollama.chat({
+    // Ollama 스트림 생성
+    const stream = await ollama.chat({
       model: MODEL_NAME,
       messages: messages,
-    });
-    
-    // AI 응답을 대화 기록에 추가
-    messages.push({ role: "assistant", content: response.message.content });
-
-    const embedding = await ollama.embed({
-        model: MODEL_NAME,
-        input: ["안녕하세요. 너는 누구야?", "너는 누구야?"],
-      });
-      console.log(embedding);
-
-    return NextResponse.json({
-      message: "성공적으로 응답을 생성했습니다.",
-      aiResponse: response.message.content,
-      userInput: userInput
+      stream: true
     });
 
+    // Next.js Response용 ReadableStream 생성
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        let aiContent = '';
+        for await (const part of stream) {
+          if (part.message && part.message.content) {
+            aiContent += part.message.content;
+            controller.enqueue(encoder.encode(part.message.content));
+          }
+        }
+        // 대화 기록에 AI 응답 추가
+        messages.push({ role: "assistant", content: aiContent });
+        controller.close();
+      }
+    });
+
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+      },
+    });
   } catch (error) {
     console.error('API 에러:', error);
     return NextResponse.json(

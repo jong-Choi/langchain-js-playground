@@ -197,17 +197,32 @@ const sendMessage = async () => {
       body: JSON.stringify({ userInput: userMessage }),
     });
     
-    const data = await response.json();
-    
-    if (data.error) {
-      setMessages(prev => [...prev, { type: 'ai', content: `에러: ${data.error}` }]);
-    } else if (data.aiResponse) {
-      setMessages(prev => [...prev, { type: 'ai', content: data.aiResponse }]);
+    if (!response.body) throw new Error('스트림 응답이 없습니다.');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let aiMessage = '';
+    setIsLoading(false);
+    setMessages(prev => [...prev, { type: 'ai', content: '' }]);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      aiMessage += chunk;
+      setMessages(prev => {
+        // 마지막 ai 메시지에 실시간으로 추가
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].type === 'ai') {
+            updated[i] = { ...updated[i], content: aiMessage };
+            break;
+          }
+        }
+        return updated;
+      });
     }
   } catch (error) {
     setMessages(prev => [...prev, { type: 'ai', content: '서버와의 통신 중 오류가 발생했습니다.' }]);
-  } finally {
-    setIsLoading(false);
   }
 };
 ```
@@ -347,8 +362,8 @@ const response = await ollama.generate({
 
 ```typescript
 const embeddings = await ollama.embed({
-  model: 'llama3.1',
-  input: ['안녕하세요', '반갑습니다']
+  model: 'mxbai-embed-large',
+  input: 'Llamas are members of the camelid family',
 });
 
 console.log(embeddings.embeddings); // 벡터 배열
@@ -362,4 +377,88 @@ console.log(modelInfo.parameters); // 모델 파라미터
 console.log(modelInfo.template);   // 프롬프트 템플릿
 console.log(modelInfo.system);     // 시스템 프롬프트
 ```
+
+## 스트리밍 응답
+
+Ollama랑 Next.js API에서 스트리밍 응답이 실제로 어떻게 동작하는지 궁금할 수 있는데, 직접 코드를 보면서 이해하면 쉽다.
+
+### 동작 원리
+
+1. **Ollama 스트림 생성**
+   - Ollama의 chat API를 쓸 때 `stream: true` 옵션을 주면, 답변이 한 번에 쏟아지는 게 아니라 토큰(문장/단어) 단위로 조금씩 온다.
+   - 이 스트림은 JavaScript의 비동기 이터러블(AsyncIterable)이라서, `for await ... of`로 한 덩어리씩 받아올 수 있다. 실제로 아래처럼 쓴다.
+
+2. **서버에서 ReadableStream 만들기**
+   - Web Streams API의 `ReadableStream`을 써서 Ollama에서 받은 데이터를 바로 클라이언트로 흘려보낸다.
+
+   ```typescript
+   const encoder = new TextEncoder();
+   const readable = new ReadableStream({
+     async start(controller) {
+       let aiContent = '';
+       for await (const part of stream) {
+         if (part.message && part.message.content) {
+           aiContent += part.message.content;
+           controller.enqueue(encoder.encode(part.message.content));
+         }
+       }
+       controller.close();
+     }
+   });
+   ```
+
+3. **클라이언트로 스트리밍 전송**
+   - Next.js의 Response 객체에 위에서 만든 `readable` 스트림을 넣어서 반환하면, 브라우저는 데이터를 한 번에 다 받는 게 아니라 서버에서 보내는 대로 실시간으로 받아볼 수 있다.
+   - `Transfer-Encoding: chunked` 헤더가 붙어서, 응답이 끝날 때까지 계속 데이터를 받을 수 있다.
+
+   ```typescript
+   return new Response(readable, {
+     headers: {
+       'Content-Type': 'text/plain; charset=utf-8',
+       'Transfer-Encoding': 'chunked',
+       'Cache-Control': 'no-cache',
+     },
+   });
+   ```
+
+4. **클라이언트에서 스트림 읽어서 실시간으로 메시지 업데이트하기**
+   - 이제 프론트엔드에서 이 스트림을 받아서 한 글자씩 실시간으로 화면에 보여주면 된다. 실제로 `page.tsx`에서 아래처럼 구현한다.
+
+   ```typescript
+   const response = await fetch('/api/chat', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ userInput: userMessage }),
+   });
+
+   if (!response.body) throw new Error('스트림 응답이 없습니다.');
+   const reader = response.body.getReader();
+   const decoder = new TextDecoder('utf-8');
+   let aiMessage = '';
+   setIsLoading(false);
+   setMessages(prev => [...prev, { type: 'ai', content: '' }]);
+
+   while (true) {
+     const { done, value } = await reader.read();
+     if (done) break;
+     const chunk = decoder.decode(value);
+     aiMessage += chunk;
+     setMessages(prev => {
+       // 마지막 ai 메시지에 실시간으로 추가
+       const updated = [...prev];
+       for (let i = updated.length - 1; i >= 0; i--) {
+         if (updated[i].type === 'ai') {
+           updated[i] = { ...updated[i], content: aiMessage };
+           break;
+         }
+       }
+       return updated;
+     });
+   }
+   ```
+
+   - fetch로 API를 호출하고, 응답의 body에서 getReader()로 스트림을 읽는다.
+   - TextDecoder로 한글/영문 등 텍스트를 잘 복원해서 chunk 단위로 받아온다.
+   - chunk가 들어올 때마다 aiMessage에 누적해서, setMessages로 마지막 ai 메시지를 실시간으로 업데이트한다.
+   - 그래서 실제로 채팅창에서 답변이 한 글자씩 실시간으로 보인다.
 

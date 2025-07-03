@@ -40,12 +40,30 @@ export default function Home() {
         body: JSON.stringify({ userInput: userMessage }),
       });
 
-      const data = await response.json();
-
-      if (data.error) {
-        setMessages(prev => [...prev, { type: 'ai', content: `에러: ${data.error}` }]);
-      } else if (data.aiResponse) {
-        setMessages(prev => [...prev, { type: 'ai', content: data.aiResponse }]);
+      if (!response.body) throw new Error('스트림 응답이 없습니다.');
+      const reader = response.body.getReader();
+      
+      const decoder = new TextDecoder('utf-8');
+      let aiMessage = '';
+      setIsLoading(false);
+      setMessages(prev => [...prev, { type: 'ai', content: '' }]);
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        aiMessage += chunk;
+        setMessages(prev => {
+          // 마지막 ai 메시지에 실시간으로 추가
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].type === 'ai') {
+              updated[i] = { ...updated[i], content: aiMessage };
+              break;
+            }
+          }
+          return updated;
+        });
       }
     } catch (error) {
       console.error('API 호출 에러:', error);
