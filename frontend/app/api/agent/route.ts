@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { ChatOllama } from '@langchain/ollama';
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import ollama from 'ollama';
 
 // Ollama 모델 설정
-const MODEL_NAME = "hf.co/rippertnt/HyperCLOVAX-SEED-Text-Instruct-1.5B-Q4_K_M-GGUF:Q4_K_M";
+const MODEL_NAME = "qwen3:4b";
+
+// 현재 시각을 반환하는 툴
+const nowTool = tool(async (_input) => {
+  return `현재 시각은 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} 입니다.`;
+}, {
+  name: 'now',
+  description: '현재 시각을 알려줍니다.',
+  schema: z.object({}) // 입력 파라미터 없음
+});
 
 // 모델이 설치되어 있는지 확인하는 함수
 async function ensureModelExists() {
   try {
     const models = await ollama.list();
-    const modelExists = models.models.some(model => model.name === MODEL_NAME);
+    const modelExists = models.models.some((model: { name: string }) => model.name === MODEL_NAME);
     
     if (!modelExists) {
       console.log(`모델 ${MODEL_NAME}을 다운로드 중...`);
@@ -21,10 +35,27 @@ async function ensureModelExists() {
   }
 }
 
-// 대화 기록을 저장할 배열 (실제 프로덕션에서는 데이터베이스나 세션 스토리지를 사용해야 함)
+const INITIAL_SYSTEM_MESSAGE = "사용자는 한국인이야.";
+
+// LangChain 메시지 배열
 let messages = [
-  { role: "system", content: "너는 사용자를 도와주는 상담사야." }, // 초기 시스템 메시지
+  new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE }),
 ];
+
+// LangChain Ollama 래퍼
+const model = new ChatOllama({
+  baseUrl: 'http://localhost:11434',
+  model: MODEL_NAME,
+  streaming: false,
+});
+
+// LangGraph Agent 생성 (nowTool 추가)
+const tools = [nowTool];
+const agent = createReactAgent({
+  llm: model,
+  tools: tools,
+});
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,38 +69,26 @@ export async function POST(request: NextRequest) {
     }
 
     await ensureModelExists();
-    messages.push({ role: "user", content: userInput });
+    const safeInput = typeof userInput === 'string' ? userInput : String(userInput ?? '');
+    messages.push(new HumanMessage({ content: String(safeInput) }));
 
-    // Ollama 스트림 생성
-    const stream = await ollama.chat({
-      model: MODEL_NAME,
-      messages: messages,
-      stream: true
+    // LangGraph agent.invoke 사용 (최대한 빠른 응답)
+    const result = await agent.invoke({
+      messages: messages.map(msg => ({
+        role: typeof msg._getType === 'function'
+          ? (msg._getType() === 'human' ? 'user' : (msg._getType() === 'ai' ? 'assistant' : 'system'))
+          : 'user',
+        content: msg.content
+      }))
     });
 
-    // Next.js Response용 ReadableStream 생성
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        let aiContent = '';
-        for await (const part of stream) {
-          if (part.message && part.message.content) {
-            aiContent += part.message.content;
-            controller.enqueue(encoder.encode(part.message.content));
-          }
-        }
-        // 대화 기록에 AI 응답 추가
-        messages.push({ role: "assistant", content: aiContent });
-        controller.close();
-      }
-    });
+    // result.messages의 마지막 메시지가 AI 응답
+    const aiContent = String(result?.messages?.slice(-1)[0]?.content || '');
+    messages.push(new AIMessage({ content: aiContent }));
 
-    return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-cache',
-      },
+    return NextResponse.json({
+      message: "AI 응답입니다.",
+      aiResponse: aiContent
     });
   } catch (error) {
     console.error('API 에러:', error);
@@ -84,7 +103,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   try {
     messages = [
-      { role: "system", content: "너는 사용자를 도와주는 상담사야." }, // 초기 시스템 메시지
+      new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE }),
     ];
     
     return NextResponse.json({ 
@@ -105,7 +124,7 @@ export async function GET() {
     return NextResponse.json({
       message: "현재 대화 기록입니다.",
       messages: messages.map(msg => ({
-        type: msg.role,
+        type: typeof msg._getType === 'function' ? msg._getType() : 'unknown',
         content: msg.content
       }))
     });

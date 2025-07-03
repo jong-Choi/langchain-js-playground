@@ -32,7 +32,7 @@ export default function Home() {
     setMessages(prev => [...prev, { type: 'user', content: userMessage }]);
 
     try {
-      const response = await fetch('/api/langchain', {
+      const response = await fetch('/api/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,30 +40,15 @@ export default function Home() {
         body: JSON.stringify({ userInput: userMessage }),
       });
 
-      if (!response.body) throw new Error('스트림 응답이 없습니다.');
-      const reader = response.body.getReader();
+      if (!response.ok) throw new Error('API 응답 오류');
       
-      const decoder = new TextDecoder('utf-8');
-      let aiMessage = '';
+      const data = await response.json();
       setIsLoading(false);
-      setMessages(prev => [...prev, { type: 'ai', content: '' }]);
       
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        aiMessage += chunk;
-        setMessages(prev => {
-          // 마지막 ai 메시지에 실시간으로 추가
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].type === 'ai') {
-              updated[i] = { ...updated[i], content: aiMessage };
-              break;
-            }
-          }
-          return updated;
-        });
+      if (data.aiResponse) {
+        setMessages(prev => [...prev, { type: 'ai', content: data.aiResponse }]);
+      } else {
+        setMessages(prev => [...prev, { type: 'ai', content: '응답을 받지 못했습니다.' }]);
       }
     } catch (error) {
       console.error('API 호출 에러:', error);
@@ -75,7 +60,7 @@ export default function Home() {
 
   const resetConversation = async () => {
     try {
-      await fetch('/api/chat', {
+      await fetch('/api/agent', {
         method: 'DELETE',
       });
       setMessages([]);
@@ -86,7 +71,7 @@ export default function Home() {
 
   const initializeModel = async () => {
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/agent', {
         method: 'PUT',
       });
       const data = await response.json();

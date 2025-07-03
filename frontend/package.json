@@ -9,12 +9,16 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.61",
+    "@langchain/langgraph": "^0.3.6",
+    "@langchain/ollama": "^0.2.3",
     "@langchain/openai": "^0.5.16",
     "langchain": "^0.3.29",
     "next": "15.3.4",
     "ollama": "^0.5.16",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zod": "^3.25.71"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
