@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOllama } from '@langchain/ollama';
-import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import ollama from 'ollama';
 import { nowTool, googleSearchTool, mathTool } from './_tools';
 
@@ -25,6 +25,21 @@ async function ensureModelExists() {
   }
 }
 
+function convertMessagesToChatHistory(messages: BaseMessage[]) {
+  return messages.map((msg) => {
+    const role =
+      typeof msg._getType === 'function'
+        ? msg._getType() === 'human'
+          ? 'user'
+          : msg._getType() === 'ai'
+            ? 'assistant'
+            : 'system'
+        : 'user';
+
+    return { role, content: msg.content };
+  });
+}
+
 const INITIAL_SYSTEM_MESSAGE = "사용자는 한국인이야.";
 
 // LangChain 메시지 배열
@@ -41,7 +56,6 @@ const model = new ChatOllama({
 
 // LangGraph Agent 생성 (nowTool과 searchTool 추가)
 const tools = [nowTool, googleSearchTool, mathTool];
-
 
 const agent = createReactAgent({
   llm: model,
@@ -65,14 +79,9 @@ export async function POST(request: NextRequest) {
     const safeInput = typeof userInput === 'string' ? userInput : String(userInput ?? '');
     messages.push(new HumanMessage({ content: String(safeInput) }));
 
-    // LangGraph agent.invoke 사용 (최대한 빠른 응답)
+    // LangGraph agent.invoke 사용 
     const result = await agent.invoke({
-      messages: messages.map(msg => ({
-        role: typeof msg._getType === 'function'
-          ? (msg._getType() === 'human' ? 'user' : (msg._getType() === 'ai' ? 'assistant' : 'system'))
-          : 'user',
-        content: msg.content
-      }))
+      messages: convertMessagesToChatHistory(messages),
     });
 
     // result.messages의 마지막 메시지가 AI 응답

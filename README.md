@@ -462,3 +462,329 @@ Ollama랑 Next.js API에서 스트리밍 응답이 실제로 어떻게 동작하
    - chunk가 들어올 때마다 aiMessage에 누적해서, setMessages로 마지막 ai 메시지를 실시간으로 업데이트한다.
    - 그래서 실제로 채팅창에서 답변이 한 글자씩 실시간으로 보인다.
 
+# LangChain으로 도구 사용하기
+LangChain은 각종 도구를 등록하여 LLM이 활용할 수 있도록 한다.
+LLM은 도구 활용이 가능한 Qwen3로 한다.
+LangChain을 사용할 때에는 스트리밍 응답이 불가능하고, thinking을 임의로 끌 수 없다는 단점이 있다.(ollama에서는 끌 수 있는데 chatOllama에서는 아직 미지원인듯.)
+
+
+## 1. 프로젝트 구조 이해
+
+```
+frontend/
+├── app/
+│   ├── api/
+│   │   ├── chat/route.ts          # 기본 Ollama 챗봇 (스트리밍)
+│   │   └── agent/route.ts         # LangGraph ReactAgent (툴 지원)
+│   ├── page.tsx                   # 기본 챗봇 UI
+│   └── agent/page.tsx             # Agent 챗봇 UI
+```
+
+## 2. 필요한 패키지 설치
+
+```bash
+cd frontend
+npm install @langchain/langgraph @langchain/ollama @langchain/core zod ollama
+```
+
+## 3. LangGraph vs LangChain 차이점
+
+### LangChain (기본)
+- **용도**: LLM과 직접 통신, 단순 챗봇
+- **장점**: 스트리밍 완벽 지원, 빠른 응답
+- **단점**: 복잡한 워크플로우 제한적
+
+### LangGraph (고급)
+- **용도**: 에이전트, 툴, 멀티스텝 워크플로우
+- **장점**: 툴 호출, 복잡한 로직, 확장성
+- **단점**: 스트리밍 제한적, 일부 모델에서 툴 미지원
+
+## 4. 단계별 구현 과정
+
+### Step 1: 기본 LangChain 챗봇 (스트리밍)
+
+```typescript
+// app/api/chat/route.ts
+import { ChatOllama } from '@langchain/ollama';
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+
+const chat = new ChatOllama({
+  baseUrl: 'http://localhost:11434',
+  model: 'qwen3:4b',
+  streaming: true,
+});
+
+// 스트리밍 응답
+const stream = await chat.stream(messages);
+for await (const chunk of stream) {
+  // 실시간으로 chunk.content 전송
+}
+```
+
+### Step 2: LangGraph ReactAgent 생성
+
+```typescript
+// app/api/agent/route.ts
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { ChatOllama } from '@langchain/ollama';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+// 1. 툴 정의
+const nowTool = tool(async (_input) => {
+  return `현재 시각은 ${new Date().toLocaleString('ko-KR')} 입니다.`;
+}, {
+  name: 'now',
+  description: '현재 시각을 알려줍니다.',
+  schema: z.object({}) // 입력 파라미터 없음
+});
+
+// 2. LLM 설정
+const model = new ChatOllama({
+  baseUrl: 'http://localhost:11434',
+  model: 'qwen3:4b',
+  streaming: false, // LangGraph에서는 false 권장
+});
+
+// 3. Agent 생성
+const agent = createReactAgent({
+  llm: model,
+  tools: [nowTool],
+});
+```
+
+### Step 3: 메시지 처리 및 응답
+
+```typescript
+// 메시지 배열 (LangChain Message 객체 사용)
+let messages = [
+  new SystemMessage({ content: "사용자는 한국인이야." }),
+];
+
+// POST 요청 처리
+export async function POST(request: NextRequest) {
+  const { userInput } = await request.json();
+  
+  // 사용자 메시지 추가
+  messages.push(new HumanMessage({ content: userInput }));
+
+  // Agent 호출 (invoke 방식 - 빠른 응답)
+  const result = await agent.invoke({
+    messages: messages.map(msg => ({
+      role: msg._getType() === 'human' ? 'user' : 
+            msg._getType() === 'ai' ? 'assistant' : 'system',
+      content: msg.content
+    }))
+  });
+
+  // 응답 추출
+  let aiContent = '';
+  if (Array.isArray(result?.messages)) {
+    for (let i = result.messages.length - 1; i >= 0; i--) {
+      const m = result.messages[i];
+      if (m._getType() === 'ai') {
+        aiContent = m.content;
+        break;
+      }
+    }
+  }
+  
+  // 대화 기록에 저장
+  messages.push(new AIMessage({ content: aiContent }));
+
+  return NextResponse.json({
+    message: "AI 응답입니다.",
+    aiResponse: aiContent
+  });
+}
+```
+
+### Step 4: 프론트엔드 연동
+
+```typescript
+// app/agent/page.tsx
+const sendMessage = async () => {
+  const response = await fetch('/api/agent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userInput: userMessage }),
+  });
+
+  const data = await response.json();
+  
+  if (data.aiResponse) {
+    setMessages(prev => [...prev, { type: 'ai', content: data.aiResponse }]);
+  }
+};
+```
+
+## 5. 핵심 개념 정리
+
+### LangChain Message 객체
+```typescript
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+
+// 메시지 타입
+new SystemMessage({ content: "시스템 프롬프트" });
+new HumanMessage({ content: "사용자 입력" });
+new AIMessage({ content: "AI 응답" });
+
+// 타입 확인
+msg._getType() // 'system', 'human', 'ai'
+```
+
+### 툴(Tool) 정의
+```typescript
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+const myTool = tool(async (input) => {
+  // 툴 로직
+  return "결과";
+}, {
+  name: 'tool_name',
+  description: '툴 설명',
+  schema: z.object({
+    // 입력 파라미터 스키마
+  })
+});
+```
+
+### Agent 타입
+```typescript
+// ReactAgent: ReAct 패턴 (추론 + 행동)
+const agent = createReactAgent({
+  llm: model,
+  tools: [tool1, tool2],
+});
+
+// 다른 Agent 타입들
+// - createOpenAIFunctionsAgent
+// - createStructuredChatAgent
+// - createConversationalRetrievalAgent
+```
+
+## 6. 스트리밍 vs Invoke
+
+### 스트리밍 (LangChain 직접)
+```typescript
+// 완벽한 실시간 스트리밍
+const stream = await chat.stream(messages);
+for await (const chunk of stream) {
+  // chunk.content를 실시간으로 전송
+}
+```
+
+### Invoke (LangGraph Agent)
+```typescript
+// 한 번에 전체 응답
+const result = await agent.invoke({ messages });
+// result.messages에서 마지막 assistant 메시지 추출
+```
+
+## 7. 모델별 툴 지원 현황
+
+### 툴 지원 모델
+- OpenAI GPT-4, GPT-3.5-turbo
+- Anthropic Claude
+- 일부 최신 Ollama 모델 (qwen3 등)
+
+### 툴 미지원 모델
+- 대부분의 community 모델
+- HyperCLOVAX, Llama-2 등
+
+**에러 메시지**: `"model does not support tools"`
+
+## 8. 실전 팁
+
+### 성능 최적화
+```typescript
+// 1. 스트리밍 끄기 (LangGraph에서)
+streaming: false
+
+// 2. 불필요한 fallback 제거
+// 3. 메시지 배열 최적화
+```
+
+### 에러 처리
+```typescript
+try {
+  const result = await agent.invoke({ messages });
+} catch (error) {
+  if (error.message.includes('does not support tools')) {
+    // 툴 없이 기본 LLM으로 fallback
+  }
+}
+```
+
+### 확장 가능한 구조
+```typescript
+// 툴 추가
+const tools = [
+  nowTool,
+  searchTool,
+  calculatorTool,
+  // ... 더 많은 툴
+];
+
+const agent = createReactAgent({
+  llm: model,
+  tools: tools,
+});
+```
+
+
+## 검색 도구
+DuckDuckGo 도구가 막혀서 구글 검색으로 구글 검색 도구를 만든다.
+### 구글 API키 발급받기
+[참고 - 바티 사용가이드](https://guide.bati.ai/service/api/googleapi)
+1. Custom Search JSON API 발급 사이트로 이동한다. [링크](https://developers.google.com/custom-search/v1/overview?hl=ko)
+2. 화면 중간의 `키 가져오기` 버튼을 눌러 프로젝트와 연결하고 키를 받아온다. -> 해당 키를 `.env`에 `GOOGLE_SEARCH_API_KEY = `로 할당한다.
+3. 구글 클라우드 콘솔 관리자 페이지의 검색엔진 추가로 접속한다. [링크](https://programmablesearchengine.google.com/controlpanel/all)
+4. `새 검색엔진 만들기`에서 `전체 웹 검색`을 체크하면 구글 검색을 하는 검색엔진이 생성된다.
+5. `검색엔진 ID`를 복사한다. -> 해당 키를 `.env`에 `GOOGLE_SEARCH_CX=`로 할당한다.
+
+### 구글 검색
+`https://www.googleapis.com`에 key와 cx를 쿼리 스트링으로 전달하고, 검색할 문구를 `q`로 전달한다.
+응답은 JSON 형식으로 온다.
+JSON 형식을 인공지능이 확인할 수 있는 값으로 파싱하여 전달하면 된다. (너무 길면 제대로 정보를 파악하지 못한다.)
+```ts
+export const googleSearchTool = tool(
+  async ({ query }) => {
+    const params = new URLSearchParams({
+      key: GOOGLE_API_KEY,
+      cx: GOOGLE_CX,
+      q: query,
+    });
+
+    const url = `https://www.googleapis.com/customsearch/v1?${params}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      throw new Error(`Google 검색 실패: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const items = data.items ?? [];
+
+    if (items.length === 0) {
+      return `"${query}"에 대한 검색 결과가 없습니다.`;
+    }
+
+    return JSON.stringify(items.map((e:any)=>{
+      return {
+        title: e.title,
+        link: e.link,
+        snippet: e.snippet
+      }
+    }));
+  },
+  {
+    name: "google_search",
+    description: "구글에서 실시간 정보를 검색합니다.",
+    schema: z.object({
+      query: z.string().describe("검색할 키워드 또는 질문"),
+    }),
+  }
+);
+```

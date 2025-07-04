@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const stream = await ollama.chat({
       model: MODEL_NAME,
       messages: messages,
-      stream: true
+      stream: true,
     });
 
     // Next.js Response용 ReadableStream 생성
