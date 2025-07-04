@@ -18,6 +18,48 @@ const nowTool = tool(async (_input) => {
   schema: z.object({}) // 입력 파라미터 없음
 });
 
+const GOOGLE_API_KEY = process.env.GOOGLE_SEARCH_API_KEY!;
+const GOOGLE_CX = process.env.GOOGLE_SEARCH_CX!;
+
+export const googleSearchTool = tool(
+  async ({ query }) => {
+    const params = new URLSearchParams({
+      key: GOOGLE_API_KEY,
+      cx: GOOGLE_CX,
+      q: query,
+    });
+
+    const url = `https://www.googleapis.com/customsearch/v1?${params}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      throw new Error(`Google 검색 실패: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const items = data.items ?? [];
+
+    if (items.length === 0) {
+      return `"${query}"에 대한 검색 결과가 없습니다.`;
+    }
+
+    return JSON.stringify(items.map((e:any)=>{
+      return {
+        title: e.title,
+        link: e.link,
+        snippet: e.snippet
+      }
+    }));
+  },
+  {
+    name: "google_search",
+    description: "구글에서 실시간 정보를 검색합니다.",
+    schema: z.object({
+      query: z.string().describe("검색할 키워드 또는 질문"),
+    }),
+  }
+);
+
 // 모델이 설치되어 있는지 확인하는 함수
 async function ensureModelExists() {
   try {
@@ -35,7 +77,7 @@ async function ensureModelExists() {
   }
 }
 
-const INITIAL_SYSTEM_MESSAGE = "사용자는 한국인이야.";
+const INITIAL_SYSTEM_MESSAGE = "사용자는 한국인이야. 사용자가 시각을 물어보면 now 도구를, 정보 검색이 필요하면 search 도구를 사용해.";
 
 // LangChain 메시지 배열
 let messages = [
@@ -49,8 +91,10 @@ const model = new ChatOllama({
   streaming: false,
 });
 
-// LangGraph Agent 생성 (nowTool 추가)
-const tools = [nowTool];
+// LangGraph Agent 생성 (nowTool과 searchTool 추가)
+const tools = [nowTool, googleSearchTool];
+
+
 const agent = createReactAgent({
   llm: model,
   tools: tools,
@@ -69,6 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     await ensureModelExists();
+
     const safeInput = typeof userInput === 'string' ? userInput : String(userInput ?? '');
     messages.push(new HumanMessage({ content: String(safeInput) }));
 
