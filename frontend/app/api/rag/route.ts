@@ -7,7 +7,8 @@ import {
   AIMessage,
   BaseMessage,
 } from "@langchain/core/messages";
-import { ChromaClient, EmbeddingFunction } from "chromadb";
+import { ChromaClient } from "chromadb";
+import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
 import ollama from "ollama";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -15,46 +16,6 @@ import { z } from "zod";
 // Ollama 모델 설정
 const MODEL_NAME = "qwen3:4b";
 const EMBEDDING_MODEL = "mxbai-embed-large";
-
-// Ollama 임베딩 함수 구현
-class OllamaEmbeddingFunction implements EmbeddingFunction {
-  private model: string;
-  private url: string;
-
-  constructor({ model, url }: { model: string; url: string }) {
-    this.model = model;
-    this.url = url;
-  }
-
-  async generate(texts: string[]): Promise<number[][]> {
-    const embeddings = [];
-    for (const text of texts) {
-      try {
-        const response = await fetch(`${this.url}/api/embeddings`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: this.model,
-            prompt: text,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Ollama API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        embeddings.push(data.embedding);
-      } catch (error) {
-        console.error("임베딩 생성 중 오류:", error);
-        throw error;
-      }
-    }
-    return embeddings;
-  }
-}
 
 // 모델이 설치되어 있는지 확인하는 함수
 async function ensureModelExists(modelName: string) {
@@ -77,23 +38,35 @@ async function ensureModelExists(modelName: string) {
 
 // PDF 전용 검색 도구
 const pdfSearchTool = tool(
-  async (input: { query: string; limit?: number; filename?: string }) => {
+  async (input: {
+    query: string[] | string;
+    limit?: number;
+    filename?: string;
+  }) => {
     try {
-      const { query, limit = 2, filename } = input;
+      console.log("🔍 PDF 검색 도구 시작:", { input });
+      const { query, limit = 3, filename } = input;
+
+      console.log("📋 검색 파라미터:", { query, limit, filename });
 
       // Chroma 클라이언트 초기화
+      console.log("🔗 ChromaDB 클라이언트 연결 중...");
       const client = new ChromaClient({
         host: "localhost",
         port: 8000,
       });
+      console.log("✅ ChromaDB 클라이언트 연결 완료");
 
       // Ollama 임베딩 함수 초기화
+      console.log("🧠 Ollama 임베딩 함수 초기화 중...");
       const embedder = new OllamaEmbeddingFunction({
         model: EMBEDDING_MODEL,
         url: "http://localhost:11434",
       });
+      console.log("✅ 임베딩 함수 초기화 완료");
 
       // 컬렉션 가져오기 또는 생성
+      console.log("📚 PDF 컬렉션 가져오기/생성 중...");
       const chromaCollection = await client.getOrCreateCollection({
         name: "pdfs",
         embeddingFunction: embedder,
@@ -101,15 +74,17 @@ const pdfSearchTool = tool(
           "hnsw:space": "cosine",
         },
       });
+      console.log("✅ PDF 컬렉션 준비 완료");
 
       // 검색 조건 설정
+      console.log("🔍 검색 조건 설정 중...");
       const searchOptions: {
         queryTexts: string[];
         nResults: number;
         include: ("documents" | "metadatas" | "distances")[];
         where?: { filename: string };
       } = {
-        queryTexts: [query],
+        queryTexts: typeof query === "string" ? [query] : [...query],
         nResults: limit,
         include: ["documents", "metadatas", "distances"],
       };
@@ -117,10 +92,29 @@ const pdfSearchTool = tool(
       // 파일명 필터 추가
       if (filename) {
         searchOptions.where = { filename: filename };
+        console.log("📁 파일명 필터 적용:", filename);
       }
 
+      console.log("🔍 검색 옵션:", searchOptions);
+
       // 검색 수행
-      const results = await chromaCollection.query(searchOptions);
+      console.log("🚀 ChromaDB 검색 실행 중...");
+      let results = await chromaCollection.query(searchOptions);
+      console.log("✅ 검색 완료, 결과:", {
+        documentsCount: results.documents?.[0]?.length || 0,
+        metadatasCount: results.metadatas?.[0]?.length || 0,
+        distancesCount: results.distances?.[0]?.length || 0,
+      });
+
+      if (filename && !results.documents?.[0]?.length) {
+        delete searchOptions.where;
+        results = await chromaCollection.query(searchOptions);
+        console.log("✅ 검색 완료, 결과:", {
+          documentsCount: results.documents?.[0]?.length || 0,
+          metadatasCount: results.metadatas?.[0]?.length || 0,
+          distancesCount: results.distances?.[0]?.length || 0,
+        });
+      }
 
       // 검색 결과 포맷팅
       const formattedResults =
@@ -151,12 +145,11 @@ const pdfSearchTool = tool(
   },
   {
     name: "pdf_search",
-    description:
-      "PDF 문서에서 특정 내용을 검색합니다. PDF 파일명을 지정하면 해당 파일에서만 검색할 수 있습니다.",
+    description: "PDF 문서에서 특정 내용을 검색합니다.",
     schema: z.object({
-      query: z.string().describe("검색할 질문이나 키워드"),
-      limit: z.number().optional().describe("반환할 결과 수 (기본값: 2)"),
-      filename: z.string().optional().describe("검색할 PDF 파일명 (선택사항)"),
+      query: z.array(z.string()).describe("검색할 질문이나 키워드 (string[])"),
+      limit: z.number().optional().describe("반환할 결과 수. (기본값: 3)"),
+      filename: z.string().optional().describe("기본값: undefined"),
     }),
   }
 );
@@ -176,7 +169,11 @@ function convertMessagesToChatHistory(messages: BaseMessage[]) {
   });
 }
 
-const INITIAL_SYSTEM_MESSAGE = `사용자에게 한국어로 대답하세요. pdf_search 도구를 사용하여 답하세요.`;
+const INITIAL_SYSTEM_MESSAGE = `사용자에게 한국어로 대답하세요. pdf_search 도구를 사용하여 답하세요.
+1. limit 파라미터가 크면 답변이 부정확해집니다. 3개 이하가 좋습니다. 1개의 pdf당 1000자를 가지고 있거든요.
+2. 사용자의 질문의 요지에 맞는 대답을 하세요.
+3. 사용자가 pdf 파일명을 정확하게 질문하였을 때에만 filename 파라미터를 사용하세요.
+4. 항상 한국어로 대답하세요.`;
 // LangChain 메시지 배열
 let messages = [new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE })];
 

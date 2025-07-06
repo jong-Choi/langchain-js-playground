@@ -1,49 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChromaClient, EmbeddingFunction, Metadata } from "chromadb";
+import { ChromaClient, Metadata } from "chromadb";
+import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
 import ollama from "ollama";
 import pdf from "pdf-parse";
 
 const MODEL_NAME = "mxbai-embed-large";
-
-// Ollama 임베딩 함수 구현
-class OllamaEmbeddingFunction implements EmbeddingFunction {
-  private model: string;
-  private url: string;
-
-  constructor({ model, url }: { model: string; url: string }) {
-    this.model = model;
-    this.url = url;
-  }
-
-  async generate(texts: string[]): Promise<number[][]> {
-    const embeddings = [];
-    for (const text of texts) {
-      try {
-        const response = await fetch(`${this.url}/api/embeddings`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: this.model,
-            prompt: text,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Ollama API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        embeddings.push(data.embedding);
-      } catch (error) {
-        console.error("임베딩 생성 중 오류:", error);
-        throw error;
-      }
-    }
-    return embeddings;
-  }
-}
 
 // 모델 존재 확인 및 다운로드 함수
 async function ensureModelExists() {
