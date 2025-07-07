@@ -173,7 +173,9 @@ const INITIAL_SYSTEM_MESSAGE = `사용자에게 한국어로 대답하세요. pd
 1. limit 파라미터가 크면 답변이 부정확해집니다. 3개 이하가 좋습니다. 1개의 pdf당 1000자를 가지고 있거든요.
 2. 사용자의 질문의 요지에 맞는 대답을 하세요.
 3. 사용자가 pdf 파일명을 정확하게 질문하였을 때에만 filename 파라미터를 사용하세요.
-4. 항상 한국어로 대답하세요.`;
+4. 항상 한국어로 대답하세요.
+5. 대답의 마지막에는 pdf 검색 결과를 3줄로 요약해서 인용해주세요.`;
+
 // LangChain 메시지 배열
 let messages = [new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE })];
 
@@ -275,6 +277,7 @@ export async function PUT() {
     // 두 모델 모두 체크
     await ensureModelExists(MODEL_NAME);
     await ensureModelExists(EMBEDDING_MODEL);
+
     return NextResponse.json({
       message: "RAG 모델이 준비되었습니다.",
       model: MODEL_NAME,

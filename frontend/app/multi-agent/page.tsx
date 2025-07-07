@@ -32,7 +32,7 @@ export default function RAGPage() {
     setMessages((prev) => [...prev, { type: "user", content: userMessage }]);
 
     try {
-      const response = await fetch("/api/rag", {
+      const response = await fetch("/api/multi-agent", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -69,7 +69,7 @@ export default function RAGPage() {
 
   const resetConversation = async () => {
     try {
-      await fetch("/api/rag", {
+      await fetch("/api/multi-agent", {
         method: "DELETE",
       });
       setMessages([]);
@@ -80,7 +80,7 @@ export default function RAGPage() {
 
   const initializeModel = async () => {
     try {
-      const response = await fetch("/api/rag", {
+      const response = await fetch("/api/multi-agent", {
         method: "PUT",
       });
       const data = await response.json();
