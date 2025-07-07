@@ -8,6 +8,7 @@ export async function decisionNode(
   state: typeof MessagesAnnotationWithToolCalls.State
 ) {
   console.log("🤔 의사결정 노드 시작");
+  const toolCalls = [];
 
   if (!state.tools_checked) {
     const qwenModel = new ChatOllama({
@@ -54,21 +55,16 @@ export async function decisionNode(
 
     if (decision.endsWith("YES")) {
       // 도구 호출 정보만 추가
-      return {
-        ...state,
-        tools_checked: true,
-        tool_calls: [
-          {
-            name: "pdf_search",
-            args: { userInput },
-          },
-        ],
-      };
+      toolCalls.push({
+        name: "pdf_search",
+        args: { userInput },
+      });
     }
   }
 
   return {
     ...state,
-    tool_calls: [],
+    tools_checked: true,
+    tool_calls: toolCalls,
   };
 }
