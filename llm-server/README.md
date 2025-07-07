@@ -77,6 +77,7 @@ results = collection.query(
 ## 문제 해결
 
 ### 포트 충돌
+
 포트 8000이 이미 사용 중인 경우, 다른 포트를 사용하세요:
 
 ```bash
@@ -84,6 +85,7 @@ chroma run --host localhost --port 8001 --path ./chroma_data
 ```
 
 ### 권한 문제
+
 데이터 폴더에 대한 권한이 없는 경우:
 
 ```bash
@@ -91,17 +93,27 @@ chmod -R 755 ./chroma_data
 ```
 
 ### 가상환경 비활성화
+
 ```bash
 deactivate
-``` 
+```
 
 ## 크로마DB 실행방법
+
 cd llm-server
 source .venv/bin/activate
 chroma run --host localhost --port 8000 --path ./chroma_data
 
 ## 크로마 DB 테스트 방법
+
 python3 test_chroma.py
 
 ## 가상환경 설치방법
+
 `pip install -r requirements.txt`
+
+## 리랭커 서버 실행 방법
+
+cd llm-server
+source .venv/bin/activate
+uvicorn reranker_server:app --host localhost --port 8001 --reload
