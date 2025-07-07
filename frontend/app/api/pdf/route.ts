@@ -4,7 +4,7 @@ import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
 import ollama from "ollama";
 import pdf from "pdf-parse";
 
-const MODEL_NAME = "mxbai-embed-large";
+const MODEL_NAME = "hf.co/Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0";
 
 // 모델 존재 확인 및 다운로드 함수
 async function ensureModelExists() {

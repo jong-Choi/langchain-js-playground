@@ -10,7 +10,8 @@ import { z } from "zod";
 
 // Ollama 모델 설정
 const MODEL_NAME = "qwen3:1.7b";
-const EMBEDDING_MODEL = "mxbai-embed-large";
+const EMBEDDING_MODEL = "hf.co/Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0";
+const RERANKER_MODEL = "hf.co/Mungert/Qwen3-Reranker-0.6B-GGUF:Q4_K_M";
 const CHAT_MODEL =
   "hf.co/cherryDavid/HyperCLOVA-X-SEED-Vision-Instruct-3B-Llamafied-Q4_K_S-GGUF:latest";
 
@@ -33,6 +34,62 @@ async function ensureModelExists(modelName: string) {
   }
 }
 
+// https://medium.com/@rosgluk/reranking-documents-with-ollama-and-qwen3-reranker-model-in-go-6dc9c2fb5f0b
+export const rerankTool = tool(
+  async (input: { query: string; candidates: string[] }) => {
+    const { query, candidates } = input;
+
+    // 후보 문서 수 제한 (최대 10개)
+    const limitedCandidates = candidates.slice(0, 10);
+
+    // 점수 계산 함수 (magnitude + positive ratio)
+    function calculateRelevanceScore(embedding: number[]): number {
+      let sumPositive = 0;
+      let sumTotal = 0;
+      for (const val of embedding) {
+        sumTotal += val * val;
+        if (val > 0) sumPositive += val;
+      }
+      if (sumTotal === 0) return 0;
+      const magnitude = Math.sqrt(sumTotal) / embedding.length;
+      const positiveRatio = sumPositive / embedding.length;
+      return (magnitude + positiveRatio) / 2;
+    }
+
+    const scoredResults: { doc: string; score: number }[] = [];
+
+    for (const doc of limitedCandidates) {
+      const prompt = `Query: ${query}\n\nDocument: ${doc}\n\nRelevance:`;
+
+      // Ollama embedding API 호출
+      const res = await ollama.embeddings({
+        model: RERANKER_MODEL,
+        prompt: prompt,
+      });
+      const embedding = res.embedding as number[];
+      const score = calculateRelevanceScore(embedding);
+      scoredResults.push({ doc, score });
+    }
+
+    // 점수 내림차순 정렬 후 상위 3개 반환
+    const sorted = scoredResults.sort((a, b) => b.score - a.score);
+    return sorted.slice(0, 3).map((item, i) => ({
+      rank: i + 1,
+      content: item.doc,
+      score: item.score,
+    }));
+  },
+  {
+    name: "rerank_with_qwen3",
+    description:
+      "Query에 대한 후보 문서들을 Qwen3 리랭커 임베딩 기반으로 재정렬합니다.",
+    schema: z.object({
+      query: z.string(),
+      candidates: z.array(z.string()),
+    }),
+  }
+);
+
 // PDF 전용 검색 도구
 const pdfSearchTool = tool(
   async (input: {
@@ -42,7 +99,7 @@ const pdfSearchTool = tool(
   }) => {
     try {
       console.log("🔍 PDF 검색 도구 시작:", { input });
-      const { query, limit = 10, filename } = input;
+      const { query, limit = 3, filename } = input;
 
       console.log("📋 검색 파라미터:", { query, limit, filename });
 
@@ -60,10 +117,12 @@ const pdfSearchTool = tool(
         model: EMBEDDING_MODEL,
         url: "http://localhost:11434",
       });
+
       console.log("✅ 임베딩 함수 초기화 완료");
 
       // 컬렉션 가져오기 또는 생성
       console.log("📚 PDF 컬렉션 가져오기/생성 중...");
+
       const chromaCollection = await client.getOrCreateCollection({
         name: "pdfs",
         embeddingFunction: embedder,
@@ -82,7 +141,7 @@ const pdfSearchTool = tool(
         where?: { filename: string };
       } = {
         queryTexts: typeof query === "string" ? [query] : [...query],
-        nResults: limit,
+        nResults: 10,
         include: ["documents", "metadatas", "distances"],
       };
 
@@ -113,16 +172,50 @@ const pdfSearchTool = tool(
         });
       }
 
-      // 검색 결과 포맷팅
-      const formattedResults =
-        results.documents?.[0]?.map((doc, index) => ({
-          id: index + 1,
-          content: doc,
-          metadata: results.metadatas?.[0]?.[index] || {},
-          score: results.distances?.[0]?.[index]
-            ? (1 - results.distances[0][index]).toFixed(4)
-            : "N/A",
-        })) || [];
+      // 검색 결과가 없으면 바로 반환
+      if (!results.documents?.[0]?.length) {
+        return JSON.stringify(
+          {
+            query,
+            results: [],
+            totalFound: 0,
+          },
+          null,
+          2
+        );
+      }
+
+      // 리랭킹 적용
+      const candidates: string[] = (results.documents?.[0] || []).filter(
+        (d): d is string => typeof d === "string"
+      );
+      const rerankResult = await rerankTool.invoke({
+        query: typeof query === "string" ? query : query[0],
+        candidates,
+      });
+      console.log("🔍 리랭킹 결과:", rerankResult);
+
+      // 상위 3개만 사용
+      let top3: { rank: number; content: string; score: number }[] = [];
+      if (Array.isArray(rerankResult)) {
+        top3 = rerankResult;
+      }
+      console.log("🔍 리랭킹 결과 중 상위 3개:", top3);
+
+      // 메타데이터와 매칭
+      const formattedResults = top3.map(
+        (item: { rank: number; content: string; score: number }) => {
+          // 원본 인덱스 찾기
+          const origIdx = candidates.indexOf(item.content);
+          return {
+            id: item.rank,
+            content: item.content,
+            metadata: results.metadatas?.[0]?.[origIdx] || {},
+            score: item.score,
+          };
+        }
+      );
+      console.log("🔍 상위 3개 결과:", formattedResults);
 
       return JSON.stringify(
         {
@@ -144,8 +237,8 @@ const pdfSearchTool = tool(
     name: "pdf_search",
     description: "PDF 문서에서 특정 내용을 검색합니다.",
     schema: z.object({
-      query: z.array(z.string()).describe("검색할 질문이나 키워드 (string[])"),
-      limit: z.number().optional().describe("반환할 결과 수. (기본값: 10)"),
+      query: z.array(z.string()).describe("검색할 질문이나 키워드 (string[]}"),
+      limit: z.number().optional().describe("반환할 결과 수. (기본값: 3)"),
       filename: z.string().optional().describe("기본값: undefined"),
     }),
   }
@@ -208,9 +301,33 @@ PDF 검색이 필요한 경우 (YES):
         new HumanMessage(`다음 질문에 대해 PDF를 검색하세요: ${userInput}`),
       ]);
 
+      /*
+        toolResponse.tool_calls는 어떠한 도구를 호출할지를 담은 배열이다.
+        {
+          tool_calls: [
+            {
+              name: "getWeather",
+              args: { location: "서울" }
+            }
+          ]
+        } 와 같은 형태로 되어 있다.
+      */
       // 도구 호출이 있는지 확인
       if (toolResponse.tool_calls && toolResponse.tool_calls.length > 0) {
-        const toolCall = toolResponse.tool_calls[0];
+        const toolCall = toolResponse.tool_calls.find(
+          (toolCall) => toolCall.name === "pdf_search"
+        );
+
+        if (!toolCall) {
+          return {
+            messages: [
+              new AIMessage({
+                content:
+                  "PDF 검색 중 오류가 발생했습니다. 일반적인 응답을 생성하겠습니다.",
+              }),
+            ],
+          };
+        }
 
         // toolCall.args가 이미 객체인지 문자열인지 확인
         let args;
@@ -361,6 +478,7 @@ export async function POST(request: NextRequest) {
     await ensureModelExists(MODEL_NAME);
     await ensureModelExists(EMBEDDING_MODEL);
     await ensureModelExists(CHAT_MODEL);
+    await ensureModelExists(RERANKER_MODEL);
 
     console.log("🚀 랭그래프 워크플로우 시작");
 
