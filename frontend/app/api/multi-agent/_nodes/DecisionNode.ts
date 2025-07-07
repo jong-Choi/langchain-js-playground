@@ -1,4 +1,4 @@
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, MessageContent } from "@langchain/core/messages";
 import { ChatOllama } from "@langchain/ollama";
 import { MessagesAnnotationWithToolCalls } from "./MessagesAnnotationWithToolCalls";
 export const DECISION_MODEL_NAME = "qwen3:1.7b";
@@ -8,7 +8,7 @@ export async function decisionNode(
   state: typeof MessagesAnnotationWithToolCalls.State
 ) {
   console.log("🤔 의사결정 노드 시작");
-  const toolCalls = [];
+  const toolCalls: { name: string; args: { userInput: MessageContent } }[] = [];
 
   if (!state.tools_checked) {
     const qwenModel = new ChatOllama({
@@ -54,7 +54,6 @@ export async function decisionNode(
     console.log("📋 의사결정 결과:", decision, decision.endsWith("YES"));
 
     if (decision.endsWith("YES")) {
-      // 도구 호출 정보만 추가
       toolCalls.push({
         name: "pdf_search",
         args: { userInput },
