@@ -1,8 +1,9 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { MessagesAnnotation } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
-export const CHAT_MODEL =
-  "hf.co/cherryDavid/HyperCLOVA-X-SEED-Vision-Instruct-3B-Llamafied-Q4_K_S-GGUF:latest";
+// export const CHAT_MODEL =
+//   "hf.co/cherryDavid/HyperCLOVA-X-SEED-Vision-Instruct-3B-Llamafied-Q4_K_S-GGUF:latest";
+export const CHAT_MODEL = "exaone3.5:2.4b";
 
 // 최종 응답 생성 노드 (hyperclovaxseed 모델 사용)
 export async function responseNode(state: typeof MessagesAnnotation.State) {

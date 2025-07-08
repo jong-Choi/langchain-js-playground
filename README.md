@@ -788,3 +788,49 @@ export const googleSearchTool = tool(
   }
 );
 ```
+
+## 크로마 db
+크로마 db는 ai-native 벡터 데이터 베이스이다.
+
+가령 수능특강을 콜렉션으로 만든다고 하면, 콜렉션 안에 `document`, `embedding`, `metadata`를 칼럼으로 데이터가 쌓인다.
+
+콜렉션명 : `수능특강`  
+document : `이 책의 차례 1. 지수와 로그...`
+embedding : `[234.2342, 1452.234 ....]`
+metadata: 
+```
+[
+    {
+      year: 2025,
+      subject: "수학 1",
+      chunk_index: 0,
+      source: "2026 수능특강 수학 1",
+      start_index: 0,
+      end_index: 983,
+      ...
+    },
+    ...
+  ],
+```
+
+### 랭체인 js 크로마 db
+`npm i @langchain/community @langchain/core chromadb`
+https://docs.trychroma.com/integrations/embedding-models/ollama?lang=typescript
+
+## 
+```
+사용자 : 너 오징어게임 3 우승자 알아?
+agent : <think>
+Okay, the user asked about the winner of the third season of "Ozpin Game," but after checking the search results, there's no relevant information. The results mention things like "Survivor: Australia" and "Mar 27, 2025" but nothing about "Ozpin Game." Maybe the user confused the show's name. Let me try to figure out what they might be referring to.
+
+First, "Ozpin Game" isn't a real show. The correct name is "Survivor," and the third season of Survivor was "Survivor: Australia," won by Nick Bock. But the user might have mixed up the title. Alternatively, there's a Korean show called "Ozpin Game," but I couldn't find any info on it. The search results didn't mention any specific winner for that show. 
+
+Since the user is Korean, maybe they're referring to a local show, but the search results didn't provide any info. The best approach is to explain that "Ozpin Game" isn't a real show and provide information about Survivor's third season. Also, mention that if they meant a different show, they should clarify. That way, the user gets the most accurate answer based on available information.
+</think>
+
+"Ozpin Game"는 실제 존재하는 프로그램이 아니며, 오류가 있을 수 있습니다. "Survivor" 시리즈 중 "Survivor: Australia" (3부)의 우승자는 **Nick Bock**입니다. 
+
+혹시 다른 프로그램이나 제목을 혼동했을 가능성이 있으므로, 정확한 제목이나 배경을 알려주시면 다시 확인해 드리겠습니다.
+```
+
+```
