@@ -52,7 +52,7 @@ const pdfSearchTool = tool(
       // Chroma 클라이언트 초기화
       console.log("🔗 ChromaDB 클라이언트 연결 중...");
       const client = new ChromaClient({
-        host: "localhost",
+        host: `${process.env.ORACLE_PUBLIC_HOST}`,
         port: 8008,
       });
       console.log("✅ ChromaDB 클라이언트 연결 완료");
@@ -61,7 +61,7 @@ const pdfSearchTool = tool(
       console.log("🧠 Ollama 임베딩 함수 초기화 중...");
       const embedder = new OllamaEmbeddingFunction({
         model: EMBEDDING_MODEL,
-        url: "http://localhost:11434",
+        url: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
       });
       console.log("✅ 임베딩 함수 초기화 완료");
 
@@ -181,7 +181,7 @@ let messages = [new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE })];
 
 // LangChain Ollama 래퍼
 const model = new ChatOllama({
-  baseUrl: "http://localhost:11434",
+  baseUrl: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
   model: MODEL_NAME,
   streaming: false,
 });

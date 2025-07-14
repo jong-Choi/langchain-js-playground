@@ -10,7 +10,7 @@ export async function responseNode(state: typeof MessagesAnnotation.State) {
   console.log("💬 최종 응답 생성 노드 시작");
 
   const chatModel = new ChatOllama({
-    baseUrl: "http://localhost:11434",
+    baseUrl: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
     model: CHAT_MODEL,
     streaming: false,
   });

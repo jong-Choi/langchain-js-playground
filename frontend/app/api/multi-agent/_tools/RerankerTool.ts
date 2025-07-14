@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const RERANKER_API = "http://localhost:8811/rerank";
+const RERANKER_API = `${process.env.ORACLE_PUBLIC_HOST}:8811/rerank`;
 
 export const rerankTool = tool(
   async (input: { query: string; candidates: string[] }) => {

@@ -1,8 +1,11 @@
-import ollama from "ollama";
+import { Ollama } from "ollama";
 
 // 모델이 설치되어 있는지 확인하는 함수
 export async function ensureModelExists(modelName: string) {
   try {
+    const ollama = new Ollama({
+      host: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+    });
     const models = await ollama.list();
     const modelExists = models.models.some(
       (model: { name: string }) => model.name === modelName
