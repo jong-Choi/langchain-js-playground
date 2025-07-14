@@ -21,16 +21,20 @@ export const pdfSearchTool = tool(
       // Chroma 클라이언트 초기화
       console.log("🔗 ChromaDB 클라이언트 연결 중...");
       const client = new ChromaClient({
-        host: `${process.env.ORACLE_PUBLIC_HOST}`,
-        port: 8008,
+        host: process.env.ORACLE_CHROMA_HOST!,
+        fetchOptions: {
+          headers: {
+            LLM_SECRET_KEY: process.env.LLM_SECRET_KEY!,
+          },
+        },
       });
       console.log("✅ ChromaDB 클라이언트 연결 완료");
 
       // Ollama 임베딩 함수 초기화
       console.log("🧠 Ollama 임베딩 함수 초기화 중...");
       const embedder = new OllamaEmbeddingFunction({
+        url: process.env.ORACLE_OLLAMA_HOST,
         model: EMBEDDING_MODEL,
-        url: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
       });
 
       console.log("✅ 임베딩 함수 초기화 완료");

@@ -12,6 +12,7 @@ import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
 import ollama from "ollama";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { fetchWithSecretKey } from "../multi-agent/_tools/utils";
 
 // Ollama 모델 설정
 const MODEL_NAME = "qwen3:4b";
@@ -52,8 +53,8 @@ const pdfSearchTool = tool(
       // Chroma 클라이언트 초기화
       console.log("🔗 ChromaDB 클라이언트 연결 중...");
       const client = new ChromaClient({
-        host: `${process.env.ORACLE_PUBLIC_HOST}`,
-        port: 8008,
+        host: `${process.env.ORACLE_CHROMA_HOST}`,
+        headers: { LLM_SECRET_KEY: process.env.LLM_SECRET_KEY! },
       });
       console.log("✅ ChromaDB 클라이언트 연결 완료");
 
@@ -61,7 +62,7 @@ const pdfSearchTool = tool(
       console.log("🧠 Ollama 임베딩 함수 초기화 중...");
       const embedder = new OllamaEmbeddingFunction({
         model: EMBEDDING_MODEL,
-        url: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+        url: `${process.env.ORACLE_OLLAMA_HOST}`,
       });
       console.log("✅ 임베딩 함수 초기화 완료");
 
@@ -181,9 +182,10 @@ let messages = [new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE })];
 
 // LangChain Ollama 래퍼
 const model = new ChatOllama({
-  baseUrl: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+  baseUrl: `${process.env.ORACLE_OLLAMA_HOST}`,
   model: MODEL_NAME,
   streaming: false,
+  fetch: fetchWithSecretKey,
 });
 
 // RAG 에이전트 생성 (PDF 검색 도구만 사용)

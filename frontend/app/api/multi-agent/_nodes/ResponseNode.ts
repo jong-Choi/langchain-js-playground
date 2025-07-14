@@ -1,6 +1,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { MessagesAnnotation } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
+import { fetchWithSecretKey } from "../_tools/utils";
 // export const CHAT_MODEL =
 //   "hf.co/cherryDavid/HyperCLOVA-X-SEED-Vision-Instruct-3B-Llamafied-Q4_K_S-GGUF:latest";
 export const CHAT_MODEL = "exaone3.5:2.4b";
@@ -10,9 +11,10 @@ export async function responseNode(state: typeof MessagesAnnotation.State) {
   console.log("💬 최종 응답 생성 노드 시작");
 
   const chatModel = new ChatOllama({
-    baseUrl: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+    baseUrl: `${process.env.ORACLE_OLLAMA_HOST}`,
     model: CHAT_MODEL,
     streaming: false,
+    fetch: fetchWithSecretKey,
   });
 
   // 마지막 사용자 메시지 찾기

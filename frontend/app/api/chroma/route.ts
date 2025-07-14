@@ -78,14 +78,14 @@ export async function POST(request: NextRequest) {
 
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
-      host: `${process.env.ORACLE_PUBLIC_HOST}`,
-      port: 8008,
+      host: `${process.env.ORACLE_CHROMA_HOST}`,
+      headers: { LLM_SECRET_KEY: process.env.LLM_SECRET_KEY! },
     });
 
     // Ollama 임베딩 함수 초기화
     const embedder = new OllamaEmbeddingFunction({
       model: MODEL_NAME,
-      url: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+      url: `${process.env.ORACLE_OLLAMA_HOST}`,
     });
 
     // 컬렉션 가져오기 또는 생성
@@ -151,14 +151,14 @@ export async function GET(request: NextRequest) {
 
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
-      host: `${process.env.ORACLE_PUBLIC_HOST}`,
-      port: 8008,
+      host: `${process.env.ORACLE_CHROMA_HOST}`,
+      headers: { LLM_SECRET_KEY: process.env.LLM_SECRET_KEY! },
     });
 
     // Ollama 임베딩 함수 초기화
     const embedder = new OllamaEmbeddingFunction({
       model: MODEL_NAME,
-      url: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+      url: `${process.env.ORACLE_OLLAMA_HOST}`,
     });
 
     // 컬렉션 가져오기 또는 생성

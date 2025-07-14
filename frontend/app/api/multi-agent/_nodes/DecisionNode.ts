@@ -1,7 +1,7 @@
 import { HumanMessage, MessageContent } from "@langchain/core/messages";
 import { ChatOllama } from "@langchain/ollama";
 import { MessagesAnnotationWithToolCalls } from "./MessagesAnnotationWithToolCalls";
-import { ensureModelExists } from "../_tools/utils";
+import { ensureModelExists, fetchWithSecretKey } from "../_tools/utils";
 export const DECISION_MODEL_NAME = "qwen3:1.7b";
 
 // 의사결정 노드: 도구 필요 여부만 판단
@@ -14,9 +14,10 @@ export async function decisionNode(
   if (!state.tools_checked) {
     await ensureModelExists(DECISION_MODEL_NAME);
     const qwenModel = new ChatOllama({
-      baseUrl: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+      baseUrl: `${process.env.ORACLE_OLLAMA_HOST}`,
       model: DECISION_MODEL_NAME,
       streaming: false,
+      fetch: fetchWithSecretKey,
     });
 
     // 마지막 사용자 메시지 찾기

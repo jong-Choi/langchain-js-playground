@@ -1,10 +1,23 @@
 import { Ollama } from "ollama";
 
+export const fetchWithSecretKey = (
+  url: RequestInfo | URL,
+  options: RequestInit | undefined = {}
+) => {
+  options.headers = {
+    ...options.headers,
+    LLM_SECRET_KEY: process.env.LLM_SECRET_KEY!,
+  };
+  return fetch(url, options);
+};
+
 // 모델이 설치되어 있는지 확인하는 함수
 export async function ensureModelExists(modelName: string) {
   try {
+    console.log(process.env.ORACLE_OLLAMA_HOST);
     const ollama = new Ollama({
-      host: `${process.env.ORACLE_PUBLIC_HOST}:11434`,
+      host: `${process.env.ORACLE_OLLAMA_HOST}`,
+      fetch: fetchWithSecretKey,
     });
     const models = await ollama.list();
     const modelExists = models.models.some(

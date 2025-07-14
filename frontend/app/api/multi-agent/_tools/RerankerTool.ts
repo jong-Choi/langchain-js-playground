@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const RERANKER_API = `${process.env.ORACLE_PUBLIC_HOST}:8811/rerank`;
+const RERANKER_API = `${process.env.ORACLE_RERANKER_HOST}/rerank`;
 
 export const rerankTool = tool(
   async (input: { query: string; candidates: string[] }) => {
@@ -12,7 +12,10 @@ export const rerankTool = tool(
     // FastAPI 서버에 POST 요청
     const response = await fetch(RERANKER_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        LLM_SECRET_KEY: process.env.LLM_SECRET_KEY!,
+      },
       body: JSON.stringify({
         query,
         documents: limitedCandidates,

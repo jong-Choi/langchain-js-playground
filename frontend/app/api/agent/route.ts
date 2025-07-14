@@ -9,6 +9,7 @@ import {
 } from "@langchain/core/messages";
 import ollama from "ollama";
 import { nowTool, googleSearchTool, mathTool } from "./_tools";
+import { fetchWithSecretKey } from "../multi-agent/_tools/utils";
 
 // Ollama 모델 설정
 const MODEL_NAME = "qwen3:4b";
@@ -54,9 +55,10 @@ let messages = [new SystemMessage({ content: INITIAL_SYSTEM_MESSAGE })];
 
 // LangChain Ollama 래퍼
 const model = new ChatOllama({
-  baseUrl: "http://localhost:11434",
+  baseUrl: `${process.env.ORACLE_OLLAMA_HOST}`,
   model: MODEL_NAME,
   streaming: false,
+  fetch: fetchWithSecretKey,
 });
 
 // LangGraph Agent 생성 (nowTool과 searchTool 추가)
