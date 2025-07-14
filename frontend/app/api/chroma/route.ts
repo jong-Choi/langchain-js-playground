@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { ChromaClient, EmbeddingFunction } from 'chromadb';
-import ollama from 'ollama';
+import { NextRequest, NextResponse } from "next/server";
+import { ChromaClient, EmbeddingFunction } from "chromadb";
+import ollama from "ollama";
 
-const MODEL_NAME = 'mxbai-embed-large';
+const MODEL_NAME = "mxbai-embed-large";
 
 // Ollama 임베딩 함수 구현
 class OllamaEmbeddingFunction implements EmbeddingFunction {
@@ -19,9 +19,9 @@ class OllamaEmbeddingFunction implements EmbeddingFunction {
     for (const text of texts) {
       try {
         const response = await fetch(`${this.url}/api/embeddings`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             model: this.model,
@@ -36,7 +36,7 @@ class OllamaEmbeddingFunction implements EmbeddingFunction {
         const data = await response.json();
         embeddings.push(data.embedding);
       } catch (error) {
-        console.error('임베딩 생성 중 오류:', error);
+        console.error("임베딩 생성 중 오류:", error);
         throw error;
       }
     }
@@ -48,15 +48,17 @@ class OllamaEmbeddingFunction implements EmbeddingFunction {
 async function ensureModelExists() {
   try {
     const models = await ollama.list();
-    const modelExists = models.models.some((model: { name: string }) => model.name === MODEL_NAME);
+    const modelExists = models.models.some(
+      (model: { name: string }) => model.name === MODEL_NAME
+    );
     if (!modelExists) {
       console.log(`모델 ${MODEL_NAME} 다운로드 중...`);
       await ollama.pull({ model: MODEL_NAME });
       console.log(`모델 ${MODEL_NAME} 다운로드 완료`);
     }
   } catch (error) {
-    console.error('모델 확인/다운로드 중 에러:', error);
-    throw new Error('모델을 준비할 수 없습니다.');
+    console.error("모델 확인/다운로드 중 에러:", error);
+    throw new Error("모델을 준비할 수 없습니다.");
   }
 }
 
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (!text) {
       return NextResponse.json(
-        { error: '텍스트가 필요합니다.' },
+        { error: "텍스트가 필요합니다." },
         { status: 400 }
       );
     }
@@ -76,22 +78,22 @@ export async function POST(request: NextRequest) {
 
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
-      host: 'localhost',
-      port: 8000,
+      host: "localhost",
+      port: 8008,
     });
 
     // Ollama 임베딩 함수 초기화
     const embedder = new OllamaEmbeddingFunction({
       model: MODEL_NAME,
-      url: 'http://localhost:11434',
+      url: "http://localhost:11434",
     });
 
     // 컬렉션 가져오기 또는 생성
     const collection = await client.getOrCreateCollection({
-      name: 'documents',
+      name: "documents",
       embeddingFunction: embedder,
       metadata: {
-        'hnsw:space': 'cosine',
+        "hnsw:space": "cosine",
       },
     });
 
@@ -110,21 +112,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '텍스트가 성공적으로 Chroma에 저장되었습니다.',
+      message: "텍스트가 성공적으로 Chroma에 저장되었습니다.",
       id: documentId,
       document: {
         content: text,
         metadata: documentMetadata,
       },
     });
-
   } catch (error) {
-    console.error('Chroma 저장 중 오류 발생:', error);
-    
+    console.error("Chroma 저장 중 오류 발생:", error);
+
     return NextResponse.json(
-      { 
-        error: '텍스트 저장 중 오류가 발생했습니다.',
-        details: error instanceof Error ? error.message : '알 수 없는 오류'
+      {
+        error: "텍스트 저장 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "알 수 없는 오류",
       },
       { status: 500 }
     );
@@ -135,12 +136,12 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('query');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const query = searchParams.get("query");
+    const limit = parseInt(searchParams.get("limit") || "10");
 
     if (!query) {
       return NextResponse.json(
-        { error: '검색 쿼리가 필요합니다.' },
+        { error: "검색 쿼리가 필요합니다." },
         { status: 400 }
       );
     }
@@ -150,19 +151,19 @@ export async function GET(request: NextRequest) {
 
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
-      host: 'localhost',
-      port: 8000,
+      host: "localhost",
+      port: 8008,
     });
 
     // Ollama 임베딩 함수 초기화
     const embedder = new OllamaEmbeddingFunction({
       model: MODEL_NAME,
-      url: 'http://localhost:11434',
+      url: "http://localhost:11434",
     });
 
     // 컬렉션 가져오기 또는 생성
     const collection = await client.getOrCreateCollection({
-      name: 'documents',
+      name: "documents",
       embeddingFunction: embedder,
     });
 
@@ -170,30 +171,30 @@ export async function GET(request: NextRequest) {
     const results = await collection.query({
       queryTexts: [query],
       nResults: limit,
-      include: ['documents', 'metadatas', 'embeddings'],
+      include: ["documents", "metadatas", "embeddings"],
     });
 
     // 결과 포맷팅
-    const formattedResults = results.documents?.[0]?.map((doc, index) => ({
-      id: index,
-      content: doc,
-      metadata: results.metadatas?.[0]?.[index] || {},
-      embedding: results.embeddings?.[0]?.[index] || [],
-    })) || [];
+    const formattedResults =
+      results.documents?.[0]?.map((doc, index) => ({
+        id: index,
+        content: doc,
+        metadata: results.metadatas?.[0]?.[index] || {},
+        embedding: results.embeddings?.[0]?.[index] || [],
+      })) || [];
 
     return NextResponse.json({
       success: true,
       query,
       results: formattedResults,
     });
-
   } catch (error) {
-    console.error('Chroma 검색 중 오류 발생:', error);
-    
+    console.error("Chroma 검색 중 오류 발생:", error);
+
     return NextResponse.json(
-      { 
-        error: '검색 중 오류가 발생했습니다.',
-        details: error instanceof Error ? error.message : '알 수 없는 오류'
+      {
+        error: "검색 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "알 수 없는 오류",
       },
       { status: 500 }
     );

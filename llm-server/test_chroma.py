@@ -11,7 +11,7 @@ def test_chroma_connection():
     try:
         # ChromaDB 클라이언트 생성
         print("ChromaDB 클라이언트 생성 중...")
-        client = chromadb.HttpClient(host="localhost", port=8000)
+        client = chromadb.HttpClient(host="localhost", port=8008)
         
         # 연결 테스트
         print("연결 테스트 중...")
@@ -79,4 +79,4 @@ if __name__ == "__main__":
         print("\n✅ ChromaDB가 정상적으로 작동하고 있습니다!")
     else:
         print("\n❌ ChromaDB 연결에 문제가 있습니다.")
-        print("서버가 실행 중인지 확인해주세요: chroma run --host localhost --port 8000 --path ./chroma_data") 
+        print("서버가 실행 중인지 확인해주세요: chroma run --host localhost --port 8008 --path ./chroma_data") 

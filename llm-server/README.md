@@ -24,14 +24,14 @@ pip install chromadb
 source .venv/bin/activate
 
 # ChromaDB 서버 시작
-chroma run --host localhost --port 8000 --path ./chroma_data
+chroma run --host localhost --port 8008 --path ./chroma_data
 ```
 
 ### 3. ChromaDB 접속 정보
 
-- **URL**: http://localhost:8000
-- **API 문서**: http://localhost:8000/docs
-- **포트**: 8000
+- **URL**: http://localhost:8008
+- **API 문서**: http://localhost:8008/docs
+- **포트**: 8008
 - **데이터 저장 위치**: `./chroma_data` (로컬 폴더)
 
 ### 4. Python 클라이언트로 테스트
@@ -41,7 +41,7 @@ import chromadb
 from chromadb.config import Settings
 
 # ChromaDB 클라이언트 생성
-client = chromadb.HttpClient(host="localhost", port=8000)
+client = chromadb.HttpClient(host="localhost", port=8008)
 
 # 연결 테스트
 client.heartbeat()  # 연결 확인
@@ -78,10 +78,10 @@ results = collection.query(
 
 ### 포트 충돌
 
-포트 8000이 이미 사용 중인 경우, 다른 포트를 사용하세요:
+포트 8008이 이미 사용 중인 경우, 다른 포트를 사용하세요:
 
 ```bash
-chroma run --host localhost --port 8001 --path ./chroma_data
+chroma run --host localhost --port 8811 --path ./chroma_data
 ```
 
 ### 권한 문제
@@ -102,7 +102,7 @@ deactivate
 
 cd llm-server
 source .venv/bin/activate
-chroma run --host localhost --port 8000 --path ./chroma_data
+chroma run --host localhost --port 8008 --path ./chroma_data
 
 ## 크로마 DB 테스트 방법
 
@@ -116,4 +116,4 @@ python3 test_chroma.py
 
 cd llm-server
 source .venv/bin/activate
-uvicorn reranker_server:app --host localhost --port 8001 --reload
+uvicorn reranker_server:app --host localhost --port 8811 --reload

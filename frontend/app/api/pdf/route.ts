@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
       host: "localhost",
-      port: 8000,
+      port: 8008,
     });
 
     // Ollama 임베딩 함수 초기화
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
     // Chroma 클라이언트 초기화
     const client = new ChromaClient({
       host: "localhost",
-      port: 8000,
+      port: 8008,
     });
 
     // Ollama 임베딩 함수 초기화

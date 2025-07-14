@@ -22,7 +22,7 @@ export const pdfSearchTool = tool(
       console.log("🔗 ChromaDB 클라이언트 연결 중...");
       const client = new ChromaClient({
         host: "localhost",
-        port: 8000,
+        port: 8008,
       });
       console.log("✅ ChromaDB 클라이언트 연결 완료");
 
