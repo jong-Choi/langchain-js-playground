@@ -1,0 +1,45 @@
+map $http_llm_secret_key $is_valid_key {
+    default             0;
+    "${LLM_SECRET_KEY}" 1;
+}
+
+server {
+    listen 80 default_server;
+    if ($is_valid_key = 0) { return 403; }
+
+    # ---------- /api/ollama/* ----------
+    location ^~ /api/ollama/ {
+        proxy_pass http://ollama:11434/;
+
+        # 헤더 수동 지정
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+    }
+    location = /api/ollama { return 308 /api/ollama/; }
+
+    # ---------- /api/reranker/* ----------
+    location ^~ /api/reranker/ {
+        proxy_pass http://reranker:8811/;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /api/reranker { return 308 /api/reranker/; }
+
+    # ---------- /api/chroma/* ----------
+    location ^~ /api/chroma/ {
+        proxy_pass http://chroma:8008/;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /api/chroma { return 308 /api/chroma/; }
+}
