@@ -5,6 +5,7 @@ map $http_llm_secret_key $is_valid_key {
 
 server {
     listen 80 default_server;
+    
     if ($is_valid_key = 0) { return 403; }
 
     # ---------- /api/ollama/* ----------
