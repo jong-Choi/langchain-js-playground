@@ -3,13 +3,17 @@ version: "3.8"
 services:
   ollama:
     image: ollama/ollama
+    container_name: ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
+    networks:
+      - npm-network
 
   chroma:
     image: ghcr.io/chroma-core/chroma:latest
+    container_name: chroma
     command: run --host 0.0.0.0 --port 8008 --path /chroma_data
     ports:
       - "8008:8008"
@@ -17,9 +21,12 @@ services:
       - ./chroma_data:/chroma_data
     environment:
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=*
+    networks:
+      - npm-network
 
   reranker:
     build: ./llm-server
+    container_name: reranker
     ports:
       - "8811:8811"
     depends_on:
@@ -30,6 +37,12 @@ services:
     environment:
       - CHROMA_URL=http://chroma:8008
       - OLLAMA_URL=http://ollama:11434
+    networks:
+      - npm-network
 
 volumes:
   ollama:
+
+networks:
+  npm-network:
+    external: true
